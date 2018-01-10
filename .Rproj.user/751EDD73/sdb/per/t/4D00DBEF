@@ -1,0 +1,21 @@
+{
+    "collab_server" : "",
+    "contents" : "\n# 0.library\nlibrary(tidyverse)\n\n# 1.连impala\nlibrary(implyr)\nlibrary(odbc)\ndrv <- odbc::odbc()\nimpala <- src_impala(\n  drv = drv,\n  driver = \"Cloudera ODBC Driver for Impala\",\n  dsn = 'jolly_impala_64'\n)\n\n# 2.查询数据\n## 2.1 供应商商品数、有重量的商品数、在售商品数\nprovider_info <- dbGetQuery(\n  impala,\n  \"WITH\n  t1 AS\n  (SELECT p1.provider_code\n  ,COUNT(p1.goods_id) AS total_goods_count\n  ,SUM(CASE WHEN p1.goods_weight >= 0.00001 THEN 1 ELSE 0 END) AS have_weight_goods_count\n  ,SUM(CASE WHEN p1.goods_weight >= 0.00001 THEN 1 ELSE 0 END) / COUNT(p1.goods_id) AS have_weight_rate\n  ,SUM(CASE WHEN p1.is_on_sale = 1 THEN 1 ELSE 0 END) AS onsale_goods_count\n  ,SUM(CASE WHEN p1.is_on_sale = 1 THEN 1 ELSE 0 END) / COUNT(p1.goods_id) AS onsale_goods_rate\n  FROM jolly.who_goods AS p1\n  GROUP BY p1.provider_code\n  )\n  SELECT *\n  FROM t1\n  ORDER BY total_goods_count DESC\n  ;\"\n)\n\nprovider_info$total_goods_count <- as.integer(provider_info$total_goods_count)\nprovider_info$have_weight_goods_count <- as.integer(provider_info$have_weight_goods_count)\nprovider_info$onsale_goods_count <- as.integer(provider_info$onsale_goods_count)\n\nprovider_info %>% \n  filter(total_goods_count >= 200 \n         & have_weight_rate < 0.5) %>% \n  View()\n  \n### total_goods_count vs have_weight_rate\nprovider_info %>% \n  filter(total_goods_count >= 200 \n         & total_goods_count < 10000) %>% \n  ggplot(aes(total_goods_count, have_weight_rate)) + \n  geom_point()\n\nprovider_info %>% \n  filter(total_goods_count <= 500) %>% \n  ggplot(aes(x = total_goods_count)) + \n  geom_histogram(binwidth = 10)\n\nsummary(provider_info)\n\n## 2.2 蓄水池商品\nsupp_pool_info <- dbGetQuery(\n  impala,\n  \"WITH\n  t1 AS\n  (SELECT FROM_UNIXTIME(p1.gmt_created, 'yyyy') AS add_year\n  ,FROM_UNIXTIME(p1.gmt_created, 'yyyy-MM') AS add_month\n  ,p1.supp_code\n  ,COUNT(p1.goods_id) AS total_goods_count\n  ,SUM(CASE WHEN p1.goods_weight >= 0.00001 THEN 1 ELSE 0 END) AS have_weight_goods_count\n  ,SUM(CASE WHEN p1.goods_weight >= 0.00001 THEN 1 ELSE 0 END) / COUNT(p1.goods_id) AS have_weight_rate\n  FROM jolly.who_product_pool AS p1\n  GROUP BY FROM_UNIXTIME(p1.gmt_created, 'yyyy')\n  ,FROM_UNIXTIME(p1.gmt_created, 'yyyy-MM')\n  ,p1.supp_code\n  )\n  SELECT *\n  FROM t1\n  ;\"\n)\n\nsupp_pool_info$total_goods_count <- as.integer(supp_pool_info$total_goods_count)\nsupp_pool_info$have_weight_goods_count <- as.integer(supp_pool_info$have_weight_goods_count)\n\nsum(supp_pool_info$total_goods_count)\nsum(supp_pool_info$have_weight_goods_count)\n\nsupp_pool_info %>% \n  group_by(add_year, add_month) %>% \n  summarise(total_goods_count = sum(total_goods_count),\n            have_weight_goods_count = sum(have_weight_goods_count))\n\n\n\n\n\n\n\n\n\n",
+    "created" : 1515552344424.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "2163679345",
+    "id" : "4D00DBEF",
+    "lastKnownWriteTime" : 1515483036,
+    "last_content_update" : 1515483036,
+    "path" : "E:/jollycorp/02_analysis/jolly_analysis_with_R/recomendation_for_packing_material.R",
+    "project_path" : "recomendation_for_packing_material.R",
+    "properties" : {
+        "tempName" : "Untitled1"
+    },
+    "relative_order" : 2,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}

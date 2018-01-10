@@ -1,0 +1,21 @@
+{
+    "collab_server" : "",
+    "contents" : "\n# 0.library\nlibrary(tidyverse)\n\n# 1.连impala\nlibrary(implyr)\nlibrary(odbc)\ndrv <- odbc::odbc()\nimpala <- src_impala(\n  drv = drv,\n  driver = \"Cloudera ODBC Driver for Impala\",\n  dsn = 'jolly_impala_64'\n)",
+    "created" : 1515552293596.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "2598491311",
+    "id" : "18E58400",
+    "lastKnownWriteTime" : 1515552356,
+    "last_content_update" : 1515552356061,
+    "path" : "E:/jollycorp/02_analysis/jolly_analysis_with_R/采购需求与配货结果分析.R",
+    "project_path" : "采购需求与配货结果分析.R",
+    "properties" : {
+        "tempName" : "Untitled1"
+    },
+    "relative_order" : 2,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}
