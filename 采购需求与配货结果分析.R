@@ -4,6 +4,7 @@ library(tidyverse)
 library(implyr)
 library(odbc)
 library(recharts)
+library(corrplot)
 source("E:/R/echartR.R",encoding="utf-8")
 
 # 1.连impala =====================================================
@@ -24,20 +25,32 @@ impala <- src_impala(
 ##     订单级别数据存放在zybiro.neo_pur_lock_orders表中
 
 #### 读入sql文件，查询order_daily
-order_daily_sql <- read_file('./pur_demand_vs_outing_stock/order_daily.sql')
-order_daily <- dbGetQuery(impala, order_daily_sql)
+# order_daily_sql <- read_file('./pur_demand_vs_outing_stock/order_daily.sql')
+# order_daily <- dbGetQuery(impala, order_daily_sql)
 
 #### 把字段类型转成numeric
-order_daily[, 2:25] <- lapply(order_daily[, 2:25], as.numeric)
+# order_daily[, 2:25] <- lapply(order_daily[, 2:25], as.numeric)
 
 #### 计算字段，结果保存为order_daily2
-order_daily2 <- order_daily %>% 
-  mutate(aim_order_rate = aim_order_num / pay_order_num, 
-         demand_goods_rate = demand_goods_num / pay_goods_num,
-         mean_peihuo_duration = peihuo_duration / peihuo_order_num, 
-         peihuo_order_rate = peihuo_order_num / pay_order_num, 
-         ship_order_rate = ship_order_num / pay_order_num, 
-         ship_goods_rate = ship_goods_num / pay_goods_num)
+# order_daily2 <- order_daily %>% 
+#   mutate(aim_order_rate = aim_order_num / pay_order_num, 
+#          demand_goods_rate = demand_goods_num / pay_goods_num,
+#          mean_peihuo_duration = peihuo_duration / peihuo_order_num, 
+#          peihuo_order_rate = peihuo_order_num / pay_order_num, 
+#          ship_order_rate = ship_order_num / pay_order_num, 
+#          ship_goods_rate = ship_goods_num / pay_goods_num)
+
+#### 把结果保存到项目本地，csv文件
+# write.csv(order_daily2, 
+#           './pur_demand_vs_outing_stock/order_daily.csv', 
+#           quote = FALSE, 
+#           row.names = FALSE)
+
+#### 从本地读取order_daily
+order_daily2 <- read.csv('./pur_demand_vs_outing_stock/order_daily.csv', 
+                         header = TRUE, 
+                         sep = ',', 
+                         stringsAsFactors = FALSE)
 
 #### 平均配货时长
 order_daily2 %>% 
@@ -50,20 +63,32 @@ order_daily2 %>%
 ## 2.2 统计每天采购需求各节点数据（处理量和时效）===============
 
 #### 读入sql文件，查询duration_daily
-duration_daily_sql <- read_file('./pur_demand_vs_outing_stock/duration_daily.sql')
-duration_daily <- dbGetQuery(impala, duration_daily_sql)
+# duration_daily_sql <- read_file('./pur_demand_vs_outing_stock/duration_daily.sql')
+# duration_daily <- dbGetQuery(impala, duration_daily_sql)
 
 #### 把字段类型转成numeric
-duration_daily[, 2:49] <- lapply(duration_daily[, 2:49], as.numeric)
+# duration_daily[, 2:49] <- lapply(duration_daily[, 2:49], as.numeric)
 
 #### 计算字段，结果保存为duration_daily2
-duration_daily2 <- duration_daily %>% 
-  mutate(mean_push_duration = push_goods_duration / push_goods_num, 
-         mean_send_duration = send_goods_duration / real_send_num, 
-         mean_receipt_duration = receipt_goods_duration / real_send_num, 
-         oos_rate = oos_num / push_goods_num, 
-         need_send_rate = 1 - oos_rate, 
-         real_send_rate = real_send_num / need_send_num)
+# duration_daily2 <- duration_daily %>% 
+#   mutate(mean_push_duration = push_goods_duration / push_goods_num, 
+#          mean_send_duration = send_goods_duration / real_send_num, 
+#          mean_receipt_duration = receipt_goods_duration / real_send_num, 
+#          oos_rate = oos_num / push_goods_num, 
+#          need_send_rate = 1 - oos_rate, 
+#          real_send_rate = real_send_num / need_send_num)
+
+#### 把结果保存到项目本地，csv文件
+# write.csv(duration_daily2, 
+#           './pur_demand_vs_outing_stock/duration_daily.csv', 
+#           quote = FALSE, 
+#           row.names = FALSE)
+
+#### 从本地读取duration_daily
+duration_daily2 <- read.csv('./pur_demand_vs_outing_stock/duration_daily.csv', 
+                           header = TRUE, 
+                           sep = ',', 
+                           stringsAsFactors = FALSE)
 
 #### 平均发货时长
 #### 发现黑五前平均发货时长比黑五之后更高，是因为黑五前几乎是实时推送
@@ -79,8 +104,20 @@ duration_daily2 %>%
 ## 2.3 join order_daily and duration_daily ======================
 
 #### join, 得到order_duration_daily
-order_duration_daily <- order_daily2 %>% 
-  left_join(duration_daily2, by = 'order_pay_date')
+# order_duration_daily <- order_daily2 %>% 
+#   left_join(duration_daily2, by = 'order_pay_date')
+
+#### 把结果保存到项目本地，csv文件
+# write.csv(order_duration_daily, 
+#           './pur_demand_vs_outing_stock/order_duration_daily.csv', 
+#           quote = FALSE, 
+#           row.names = FALSE)
+
+#### 从本地读取duration_daily
+order_duration_daily <- read.csv('./pur_demand_vs_outing_stock/order_duration_daily.csv', 
+                                 header = TRUE, 
+                                 sep = ',', 
+                                 stringsAsFactors = FALSE)
 
 #### 各个节点平均处理时间
 order_duration_daily %>% 
@@ -97,6 +134,10 @@ order_duration_daily %>%
 
 # 3.预测tn期配货完成订单量 =======================================
 
+## 3.0 说明
+##     预测t0期的下单订单中，在tn(n=0, 1, 2, ...)天完成配货的订单量
+##     特征变量：订单量、商品量、命中率、推送|发货|签收量和时效等
+
 ## 3.1 预测付款订单中多少订单在当天(t0)完成配货 ==================
 ## 目标变量：t0_peihuo_order_num
 ## 特征变量：1.pay_order_num, pay_goods_num, aim_order_rate,demand_goods_rate,
@@ -104,6 +145,7 @@ order_duration_daily %>%
 ##           3.24h内发货数量：t0_send_goods_num, t12_send_goods_num
 ##           4.24h内签收数量：t0_receipt_goods_num, t12_receipt_goods_num
 
+### 3.1.1 筛选特征变量，构建数据集
 t0_order_duration <- order_duration_daily %>% 
   select(t0_peihuo_order_num, 
          pay_order_num, 
@@ -122,17 +164,283 @@ t0_order_duration <- order_duration_daily %>%
          t12_receipt_goods_num)
 
 t0_order_duration %>% 
+  # filter(aim_order_rate < 0.1) %>% 
   ggplot(aes(x = aim_order_rate, 
              y = t0_peihuo_order_num)) + 
   geom_point()
 
+#### 相关系数
+#### 1.图
+t0_corr <- cor(t0_order_duration)
+corrplot(corr = t0_corr)
+#### 发现t0_peihuo_order_num与aim_order_rate的相关系数最大
+#### 2.值
+cor(x = t0_order_duration[, 2:15], 
+    y = t0_order_duration[, 1])
+
+### 3.1.2 建模
+model_lm <- lm(t0_peihuo_order_num~., 
+               data = t0_order_duration)
+##### 建模结果
+summary(model_lm)
+
+### 3.1.3 
+model_lm_step <- step(model_lm)
+
+summary(model_lm_step)
+
+
+#### 残差
+residuals(model_lm_step)
+
+#### 残差图
+plot(residuals(model_lm_step))
+
+#### 残差/实际单数
+res_minus <- residuals(model_lm_step)/t0_order_duration$t0_peihuo_order_num
+plot(res_minus[1:30])
+max(res_minus[1:30])
+min(res_minus[1:30])
+#### 发现黑五前的预测效果还是很不错的，但是黑五后效果就不够好
+
+#### 均方误差
+mean(residuals(model_lm_step)^2)
+
+#### 均方根误差
+sqrt(mean(residuals(model_lm_step)^2))
+
+#### 再次建模，筛选变量
+t0_order_duration2 <- order_duration_daily %>% 
+  select(t0_peihuo_order_num, 
+         pay_goods_num, 
+         aim_order_rate, 
+         t0_push_goods_num,  
+         t4_push_goods_num, 
+         t10_push_goods_num)
+
+model_lm2 <- lm(t0_peihuo_order_num ~ ., 
+                data = t0_order_duration2)
+
+summary(model_lm2)
+
+#### 模型效果
+plot(residuals(model_lm2))
+res_minus2 <- residuals(model_lm2) / t0_order_duration2$t0_peihuo_order_num
+plot(res_minus2)
+sqrt(mean(residuals(model_lm2)^2))
+max(res_minus2)
+min(res_minus2)
+mean(abs(res_minus2))
+sqrt(mean(residuals(model_lm2)^2))/mean(t0_order_duration$t0_peihuo_order_num)
+
+
+t0_order_duration2 %>% 
+  ggplot(aes(x = t0_peihuo_order_num, 
+             y = t0_peihuo_order_num_pre)) + 
+  geom_point()
+
+t0_order_duration2 %>% 
+  ggplot(aes(x = t0_peihuo_order_num, 
+             y = aim_order_rate)) + 
+  geom_point()
+
+ggplot() + 
+  geom_point(aes(x = 1:58, 
+                 y = t0_order_duration2$t0_peihuo_order_num, 
+                 color = I('red'))) + 
+  geom_point((aes(x = 1:58, 
+                  y = predict(model_lm2, 
+                              t0_order_duration2[, -1]), 
+                  color = I('blue'))))
+
+max(abs(res_minus2[1:30]))
+min(abs(res_minus2[1:30]))
 
 
 
+## 3.2 预测付款订单中多少订单在第二天(t1)完成配货 ==================
+## 目标变量：t1_peihuo_order_num
+## 特征变量：1.pay_order_num, pay_goods_num, aim_order_rate,demand_goods_rate,
+##           2.各时间段推送数量:tn_push_goods_num
+##           3.48h内发货数量：tn_send_goods_num
+##           4.48h内签收数量：tn_receipt_goods_num
+
+### 3.1.1 筛选特征变量，构建数据集
+t1_order_duration <- order_duration_daily %>% 
+  select(t1_peihuo_order_num, 
+         pay_order_num, 
+         pay_goods_num, 
+         aim_order_rate,
+         demand_goods_rate,
+         t0_push_goods_num, 
+         t2_push_goods_num, 
+         t4_push_goods_num, 
+         t6_push_goods_num, 
+         t8_push_goods_num, 
+         t10_push_goods_num, 
+         t0_send_goods_num, 
+         t12_send_goods_num, 
+         t24_send_goods_num, 
+         t36_send_goods_num, 
+         t0_receipt_goods_num, 
+         t12_receipt_goods_num, 
+         t24_receipt_goods_num, 
+         t36_receipt_goods_num)
+
+#### 相关系数
+#### 1.图
+t1_corr <- cor(t1_order_duration)
+corrplot(corr = t1_corr)
+#### 发现t1_peihuo_order_num与其他各个变量的相关系数都不太大
+#### 2.值
+cor(x = t1_order_duration[, 2:19], 
+    y = t1_order_duration[, 1])
+
+### 3.1.2 建模
+model_lm <- lm(t1_peihuo_order_num~., 
+               data = t1_order_duration)
+##### 建模结果
+summary(model_lm)
+
+### 3.1.3 
+model_lm_step <- step(model_lm)
+
+summary(model_lm_step)
+
+
+#### 残差
+residuals(model_lm_step)
+
+#### 残差图
+plot(residuals(model_lm_step))
+
+#### 残差/实际单数
+res_minus <- residuals(model_lm_step)/t1_order_duration$t1_peihuo_order_num
+plot(res_minus)
+max(res_minus)
+min(res_minus)
+max(abs(res_minus))
+min(abs(res_minus))
+
+#### 均方根误差
+sqrt(mean(residuals(model_lm_step)^2))
+
+#### 均方根误差/平均订单数
+sqrt(mean(residuals(model_lm2)^2))/mean(t1_order_duration$t1_peihuo_order_num)
+
+ggplot() + 
+  geom_point(aes(x = 1:58, 
+                 y = t1_order_duration$t1_peihuo_order_num, 
+                 color = I('red'))) + 
+  geom_point((aes(x = 1:58, 
+                  y = predict(model_lm, 
+                              t1_order_duration[, -1]), 
+                  color = I('blue'))))
+actual_pred <- data.frame(actual = t1_order_duration$t1_peihuo_order_num, 
+                          pred = predict(model_lm, 
+                                         t1_order_duration[, -1]))
+actual_pred %>% 
+  mutate(rate = residuals(model_lm)/actual) %>% 
+  View()
+
+
+head(actual_pred)
+
+max(abs(res_minus2[1:30]))
+min(abs(res_minus2[1:30]))
 
 
 
+## 3.3 预测付款订单中多少订单在第三天(t2)完成配货 ==================
+## 目标变量：t1_peihuo_order_num
+## 特征变量：1.pay_order_num, pay_goods_num, aim_order_rate,demand_goods_rate,
+##           2.各时间段推送数量:tn_push_goods_num
+##           3.72h内发货数量：tn_send_goods_num
+##           4.72h内签收数量：tn_receipt_goods_num
 
+### 3.3.1 筛选特征变量，构建数据集
+t2_order_duration <- order_duration_daily %>% 
+  select(t2_peihuo_order_num, 
+         pay_order_num, 
+         pay_goods_num, 
+         aim_order_rate,
+         demand_goods_rate,
+         t0_push_goods_num, 
+         t2_push_goods_num, 
+         t4_push_goods_num, 
+         t6_push_goods_num, 
+         t8_push_goods_num, 
+         t10_push_goods_num, 
+         t0_send_goods_num, 
+         t12_send_goods_num, 
+         t24_send_goods_num, 
+         t36_send_goods_num, 
+         t48_send_goods_num, 
+         t60_send_goods_num, 
+         t0_receipt_goods_num, 
+         t12_receipt_goods_num, 
+         t24_receipt_goods_num, 
+         t36_receipt_goods_num, 
+         t48_receipt_goods_num, 
+         t60_receipt_goods_num)
+
+#### 相关系数
+#### 1.图
+t2_corr <- cor(t2_order_duration)
+corrplot(corr = t2_corr)
+#### 发现t1_peihuo_order_num与其他各个变量的相关系数都不太大
+#### 2.值
+cor(x = t2_order_duration[, 2:23], 
+    y = t2_order_duration[, 1])
+
+### 3.3.2 建模
+model_lm <- lm(t2_peihuo_order_num~., 
+               data = t2_order_duration)
+##### 建模结果
+summary(model_lm)
+
+### 3.3.3 
+model_lm_step <- step(model_lm)
+
+summary(model_lm_step)
+
+
+#### 残差
+residuals(model_lm_step)
+
+#### 残差图
+plot(residuals(model_lm_step))
+
+#### 残差/实际单数
+res_minus <- residuals(model_lm_step)/t2_order_duration$t2_peihuo_order_num
+plot(res_minus)
+max(res_minus)
+min(res_minus)
+max(abs(res_minus))
+min(abs(res_minus))
+
+#### 均方根误差
+sqrt(mean(residuals(model_lm_step)^2))
+
+#### 均方根误差/平均订单数
+sqrt(mean(residuals(model_lm2)^2))/mean(t1_order_duration$t1_peihuo_order_num)
+
+ggplot() + 
+  geom_point(aes(x = 1:58, 
+                 y = t2_order_duration$t2_peihuo_order_num, 
+                 color = I('red'))) + 
+  geom_point((aes(x = 1:58, 
+                  y = predict(model_lm, 
+                              t2_order_duration[, -1]), 
+                  color = I('blue'))))
+actual_pred <- data.frame(actual = t2_order_duration$t2_peihuo_order_num, 
+                          pred = predict(model_lm, 
+                                         t2_order_duration[, -1]))
+actual_pred %>% 
+  mutate(rate = residuals(model_lm)/actual) %>% 
+  ggplot(aes(x = 1:58, 
+             y = rate)) + 
+  geom_point()
 
 
 
