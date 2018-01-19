@@ -189,6 +189,7 @@ model_lm_step <- step(model_lm)
 
 summary(model_lm_step)
 
+mean(t0_order_duration$t0_peihuo_order_num)
 
 #### 残差
 residuals(model_lm_step)
@@ -198,10 +199,27 @@ plot(residuals(model_lm_step))
 
 #### 残差/实际单数
 res_minus <- residuals(model_lm_step)/t0_order_duration$t0_peihuo_order_num
-plot(res_minus[1:30])
-max(res_minus[1:30])
+plot(res_minus)
+max(res_minus)
 min(res_minus[1:30])
 #### 发现黑五前的预测效果还是很不错的，但是黑五后效果就不够好
+
+
+t0_order_duration[29,] %>% 
+  View()
+residuals(model_lm_step)[29]
+
+t1 <- as.data.frame(as.matrix(lapply(t0_order_duration, mean)))
+
+t1$test_col <- row.names(t1)
+t2 <- as.data.frame(coefficients(model_lm_step))
+t2$test_col <- row.names(t2)
+colnames(t2) <- c('coef', 'test_col')
+
+t12 <- t2 %>% 
+  inner_join(t1, by = 'test_col')
+
+write.csv(t12, "./test.csv")
 
 #### 均方误差
 mean(residuals(model_lm_step)^2)
@@ -212,11 +230,8 @@ sqrt(mean(residuals(model_lm_step)^2))
 #### 再次建模，筛选变量
 t0_order_duration2 <- order_duration_daily %>% 
   select(t0_peihuo_order_num, 
-         pay_goods_num, 
          aim_order_rate, 
-         t0_push_goods_num,  
-         t4_push_goods_num, 
-         t10_push_goods_num)
+         demand_goods_rate)
 
 model_lm2 <- lm(t0_peihuo_order_num ~ ., 
                 data = t0_order_duration2)
